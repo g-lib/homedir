@@ -12,17 +12,16 @@ import (
 	"sync"
 )
 
-// DisableCache will disable caching of the home directory. Caching is enabled
-// by default.
+// DisableCache 将会关闭家目录缓存，缺省缓存是开启的
 var DisableCache bool
 
 var homedirCache string
 var cacheLock sync.RWMutex
 
-// Dir returns the home directory for the executing user.
+// Dir 返回当前用户的家目录
 //
-// This uses an OS-specific method for discovering the home directory.
-// An error is returned if a home directory cannot be detected.
+// 使用操作系统相关的方法来发现家目录，
+// 如果无法探测出家目录将会返回一个错误
 func Dir() (string, error) {
 	if !DisableCache {
 		cacheLock.RLock()
@@ -55,6 +54,8 @@ func Dir() (string, error) {
 // Expand expands the path to include the home directory if the path
 // is prefixed with `~`. If it isn't prefixed with `~`, the path is
 // returned as-is.
+// Expand 如果路径以`~`开头，将`~`展开为家目录路径。
+// 如果`~`不在开头,原样返回
 func Expand(path string) (string, error) {
 	if len(path) == 0 {
 		return path, nil
@@ -65,7 +66,7 @@ func Expand(path string) (string, error) {
 	}
 
 	if len(path) > 1 && path[1] != '/' && path[1] != '\\' {
-		return "", errors.New("cannot expand user-specific home dir")
+		return "", errors.New("无法展开用户指定的主目录")
 	}
 
 	dir, err := Dir()
@@ -76,10 +77,10 @@ func Expand(path string) (string, error) {
 	return filepath.Join(dir, path[1:]), nil
 }
 
-// Reset clears the cache, forcing the next call to Dir to re-detect
-// the home directory. This generally never has to be called, but can be
-// useful in tests if you're modifying the home directory via the HOME
-// env var or something.
+// Reset 清除缓存，强制下次调用重新探测家目录
+//
+// 这个函数通常不会被调用，但是在测试的时候通过HOME环境变量
+// 或其他的方式改变了家目录就会非常有用
 func Reset() {
 	cacheLock.Lock()
 	defer cacheLock.Unlock()
@@ -89,18 +90,18 @@ func Reset() {
 func dirUnix() (string, error) {
 	homeEnv := "HOME"
 	if runtime.GOOS == "plan9" {
-		// On plan9, env vars are lowercase.
+		// 在plan9操作系统,环境变量是小写
 		homeEnv = "home"
 	}
 
-	// First prefer the HOME environmental variable
+	// 第一个可能的 HOME 环境变量
 	if home := os.Getenv(homeEnv); home != "" {
 		return home, nil
 	}
 
 	var stdout bytes.Buffer
 
-	// If that fails, try OS specific commands
+	// 如果失败了,尝试操作系统相关命令
 	if runtime.GOOS == "darwin" {
 		cmd := exec.Command("sh", "-c", `dscl -q . -read /Users/"$(whoami)" NFSHomeDirectory | sed 's/^[^ ]*: //'`)
 		cmd.Stdout = &stdout
@@ -114,7 +115,7 @@ func dirUnix() (string, error) {
 		cmd := exec.Command("getent", "passwd", strconv.Itoa(os.Getuid()))
 		cmd.Stdout = &stdout
 		if err := cmd.Run(); err != nil {
-			// If the error is ErrNotFound, we ignore it. Otherwise, return it.
+			// 如果错误是ErrNotFound,忽略。否则返回它
 			if err != exec.ErrNotFound {
 				return "", err
 			}
@@ -129,7 +130,7 @@ func dirUnix() (string, error) {
 		}
 	}
 
-	// If all else fails, try the shell
+	// 如果都失败了，尝试用shell
 	stdout.Reset()
 	cmd := exec.Command("sh", "-c", "cd && pwd")
 	cmd.Stdout = &stdout
@@ -139,19 +140,19 @@ func dirUnix() (string, error) {
 
 	result := strings.TrimSpace(stdout.String())
 	if result == "" {
-		return "", errors.New("blank output when reading home directory")
+		return "", errors.New("读取家目录的时候空白输出")
 	}
 
 	return result, nil
 }
 
 func dirWindows() (string, error) {
-	// First prefer the HOME environmental variable
+	// 第一个最可能的 HOME 环境变量
 	if home := os.Getenv("HOME"); home != "" {
 		return home, nil
 	}
 
-	// Prefer standard environment variable USERPROFILE
+	// 第二个最可能的USERPROFILE环境变量
 	if home := os.Getenv("USERPROFILE"); home != "" {
 		return home, nil
 	}
@@ -160,7 +161,7 @@ func dirWindows() (string, error) {
 	path := os.Getenv("HOMEPATH")
 	home := drive + path
 	if drive == "" || path == "" {
-		return "", errors.New("HOMEDRIVE, HOMEPATH, or USERPROFILE are blank")
+		return "", errors.New("HOMEDRIVE, HOMEPATH, 和 USERPROFILE均为空白")
 	}
 
 	return home, nil
